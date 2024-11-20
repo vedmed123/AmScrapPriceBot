@@ -14,7 +14,6 @@ import datetime
 # from selenium.webdriver.common.by import By
 # from selenium.webdriver.support.ui import WebDriverWait
 import win32com.client  # pywin32 это работа с Exel через COM напрямую
-# import json
 # from PyQt6 import QtCore, QtGui, QtWidgets
 # from PyQt6.QtWidgets import QMessageBox
 
