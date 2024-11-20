@@ -17,7 +17,7 @@ import win32com.client  # pywin32 это работа с Exel через COM н�
 # import json
 # from PyQt6 import QtCore, QtGui, QtWidgets
 # from PyQt6.QtWidgets import QMessageBox
-# import AmZakaz_gui
+
 
 '''
 Переустановил пакет websockets с версии 14.1 на версию 13 - иначе ошибка
