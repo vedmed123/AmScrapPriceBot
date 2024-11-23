@@ -28,7 +28,7 @@ def get_all_product_from_sale_page(driver, produkti, item_description_box_l, sec
     """функция считывает ВСЕ товары из полученного блока товаров
     в разделе типа Акции и возвращает список словарей с параметрами каждого товара"""
     prod = []  # sale_value, sale_percent, name, artikul, section
-    art = {} #href name value artikul points section
+    art = {}  # href name value artikul points section
     for item_description in item_description_box_l:
 
         item_artikul_field = item_description.find(class_='product-article_number').text.strip()
@@ -37,14 +37,14 @@ def get_all_product_from_sale_page(driver, produkti, item_description_box_l, sec
         art['artikul'] = item_articul
 
         item_sale_percent = item_description.find(class_='flag_sale-count')
-        if item_sale_percent != None:
+        if not item_sale_percent is None:
             params = string_to_numbers(item_sale_percent.text)
             art['sale_percent'] = params[0]
         else:
             art['sale_percent'] = 0
 
         item_price = item_description.find(class_='product-price_current')
-        if item_price != None:
+        if not item_price is None:
             params = string_to_numbers(item_price.text)
             art['sale_value'] = params[0]
         else:
@@ -127,6 +127,7 @@ def get_all_product_from_sale_page(driver, produkti, item_description_box_l, sec
 
     return prod  # ключи словаря артикула: sale_value, sale_percent, name, artikul, section
 
+
 def sales_to_exel_telegram(produkti):
     '''получает список продуктов Каталога,
      Открывает Exel, создаёт новую книгу
@@ -177,16 +178,18 @@ def sales_to_exel_telegram(produkti):
         # if edin == 0: exel.Cells(i, 5).Value = round(produkt['value']/tenge + produkt['value']/tenge*dostavka/100)
         exel.Cells(i, 6).Value = produkt['section']
 
+
 def sales_to_bot_db(produkti): # sale_value, sale_percent, name, artikul, section
     kod_real = [] # список для запоминания кода
+    print("Начинаю обновлять коды Акций в базе.")
     # =================================================================================================
-    with sqlite3.connect("dist\\AmVrnKotlBot_telegram_clients.db") as db:
+    with sqlite3.connect("C:\\Users\\vedmed\\PycharmProjects\\AmKotTelBot\\dist\\AmVrnKotlBot_telegram_clients.db") as db:
         # ====================================================================================================
         cur = db.cursor()
         # обнуляем все скидки в базе
-        sbros = cur.execute("UPDATE tblPriceList SET skidka=?, skidka_price=?", ("", "",))
+        sbros = cur.execute("UPDATE tblPriceList SET skidka=?, skidka_price=?, sklad=?", ("", "", "",))
         db.commit()
-        i = 0 # счётчик для нумерации строк лога
+        i = 1 # счётчик для нумерации строк лога
         for produkt in produkti:
             kod = produkt['artikul']
             kod_real.append(kod)  # запоминаем код для сравнения потом
@@ -210,14 +213,16 @@ def sales_to_bot_db(produkti): # sale_value, sale_percent, name, artikul, sectio
             else:
                 # "UPDATE users SET email='bob@newemail.com' WHERE name='Bob'"
                 sale = cur.execute("UPDATE tblPriceList SET skidka=?, skidka_price=?, sklad=? \
-                              WHERE kod=?", (articul_sale_percent, articul_sale_price, kod, articul_sklad,))
+                              WHERE kod=?", (articul_sale_percent, articul_sale_price, articul_sklad, kod,))
                 db.commit()
                 print(f"{i} +++++ {kod}, скидки кода обновлены")
             i += 1
 
-        print("Закончил работу.")
+        print("Закончил обновление Акций в базе.")
 
     return
+
+
 def string_to_numbers(str_am):
     ''' получает строку вида: '\n Промый ы\n -₸ 70,00\n  ины\n  ₸ 70,00\n Всег\n  -25,00
     8722 - это html-знак 'минус'
@@ -253,6 +258,7 @@ def string_to_numbers(str_am):
             prev_char = ''
     return digits # возвращает список цифр формата float
 
+
 async def main():
     # считывает раздел Акции
     '''Открывает сайт,  переходит в Акции
@@ -261,113 +267,69 @@ async def main():
     возвращает список словарей'''
     # ======= считываем позиции Каталога ==================
 
-    driver = await uc.start()
-
-    # открываем Сайт
-    site_base_url = 'https://www.kz.amway.com'
-    site_path = ''
-    site_url = site_base_url + site_path
-
-    tab = await driver.get(site_url)
-
     try:
-        element = await tab.wait_for(text="ada-button-frame", timeout=40)
-        if element:
-            print("Главная страница загрузилась.", element.text)
-        else:
-            print("Главная страница не загрузилась!!!!!!!!")
-    except Exception as e:
-        print(f"Ошибка ожидания загрузки Главной страницы!: {e}")
-        return
 
-    # Подтверждаем геолокацию
-    try:
-        button_da = await tab.find(" Да", best_match=True)
-        await button_da.mouse_move()
-        await driver.wait(random.uniform(1, 3))
-        await button_da.click()
-        await driver.wait(2)
-    except:
-        print("Сбой подтверждения геолокации!")
-        return
+        print("Начинаю работу.")
 
-    # жмём на крестик убираем баннер куки внизу страницы
-    try:
-        disclamer_button = await tab.find("disclaimer__button", best_match=True)
-        await disclamer_button.mouse_move()
-        await driver.wait(random.uniform(1, 3))
-        await disclamer_button.click()
-    except:
-        print("Сбой убирания баннера куки!")
-        pass
+        skladi = ["Актобе", "Астана", "Алматы"]
+        skladi_list = ["Актюбинская обл.", "Астана", "Алматы"]
 
-    await driver.wait(random.uniform(1, 3))
-    # находим и жмём меню Акции на главной странице
-    user_vhod_link = await tab.find('/promo-page', best_match=True)
-    await user_vhod_link.mouse_move()
-    await driver.wait(random.uniform(1, 3))
-    await user_vhod_link.click()
+        # бесконечный цикл для считывания с задержками по времени
+        while True:
 
-    try:
-        element = await tab.wait_for(text="product-item simple-card", timeout=30)
-        if element:
-            print("Страница Акции загрузилась.", element.text)
-        else:
-            print("Страница Акции не загрузилась!!!!!!!!")
-    except Exception as e:
-        print(f"Ошибка ожидания загрузки Страница Акции!: {e}")
-        return
+            print("Создаю Хром.")
+            driver = await uc.start()
 
-    skladi = ["Актобе", "Астана", "Алматы"]
-    skladi_list = ["Актюбинская обл.", "Астана", "Алматы"]
+            # открываем Сайт
+            site_base_url = 'https://www.kz.amway.com'
+            site_path = ''
+            site_url = site_base_url + site_path
 
-    # бесконечный цикл для считывания с задержками по времени
-    while True:
+            tab = await driver.get(site_url)
 
-        produkti = []
-
-        for i in range(3):
-
-            print(f"Выбираю город: {skladi[i]}")
-            # находим и жмём геолокацию
-            user_geo = await tab.find('user-location---cityName', best_match=True, timeout=5)
-            await user_geo.mouse_move()
-            await driver.wait(random.uniform(1, 3))
-            await user_geo.click()
-
-            # находим и жмём поле ввода города
-            input_geo = await tab.find("searchControlInput---3aCkg_0", timeout=5)
-            await input_geo.mouse_move()
-            await driver.wait(random.uniform(1, 3))
-            await input_geo.click()
-
-            krestik = await tab.find("search-autocomplete__clear-btn", best_match=True, timeout=5)
-            await krestik.mouse_move()
-            await driver.wait(random.uniform(1, 3))
-            await krestik.click()
-
-            # Выбираю склад
-            await driver.wait(random.uniform(1, 3))
-            await input_geo.send_keys(skladi[i])
-            await driver.wait(5)
-
-            # находим и жмём город в списке
-            city = await tab.find("search-autocomplete-results__item", timeout=5) # skladi_list[i])
-            await city.mouse_move()
-            await driver.wait(random.uniform(1, 3))
-            await city.click()
-
-            await driver.wait(5)
-
-            # находим и жмём кнопку Выбрать
-            vibor_but = await tab.find("selector---button---36kyL_0", timeout=5)
-            await vibor_but.mouse_move()
-            await driver.wait(random.uniform(1, 3))
-            await vibor_but.click()
-
-            # Жду загрузку страницы Акции
             try:
-                element = await tab.wait_for(text="product-article_number", timeout=30)
+                element = await tab.wait_for(text="ada-button-frame", timeout=1800)
+                if element:
+                    print("Главная страница загрузилась.", element.text)
+                else:
+                    print("Главная страница не загрузилась!!!!!!!!")
+            except Exception as e:
+                print(f"Ошибка ожидания загрузки Главной страницы!: {e}")
+                driver.stop()
+                await driver.wait(60)
+                continue
+
+
+            # Подтверждаем геолокацию
+            try:
+                button_da = await tab.find(" Да", best_match=True)
+                await button_da.mouse_move()
+                await driver.wait(random.uniform(1, 3))
+                await button_da.click()
+                await driver.wait(2)
+            except:
+                print("Сбой подтверждения геолокации!")
+                return
+
+            # жмём на крестик убираем баннер куки внизу страницы
+            try:
+                disclamer_button = await tab.find("disclaimer__button", best_match=True)
+                await disclamer_button.mouse_move()
+                await driver.wait(random.uniform(1, 3))
+                await disclamer_button.click()
+            except:
+                print("Сбой убирания баннера куки!")
+                pass
+
+            await driver.wait(random.uniform(1, 3))
+            # находим и жмём меню Акции на главной странице
+            user_vhod_link = await tab.find('/promo-page', best_match=True)
+            await user_vhod_link.mouse_move()
+            await driver.wait(random.uniform(1, 3))
+            await user_vhod_link.click()
+
+            try:
+                element = await tab.wait_for(text="product-item simple-card", timeout=30)
                 if element:
                     print("Страница Акции загрузилась.", element.text)
                 else:
@@ -376,70 +338,144 @@ async def main():
                 print(f"Ошибка ожидания загрузки Страница Акции!: {e}")
                 return
 
-            await driver.wait(10)
+            produkti = []
 
-            # парсим страницу
-            bs = BeautifulSoup(await tab.get_content(), 'html.parser')
+            for i in range(3):
 
-            # словарь для хранения параметров товаров
-            # articul = {}
-            # список для хранения всех товаров
+                print(f"Выбираю город: {skladi[i]}")
+                # находим и жмём геолокацию
+                user_geo = await tab.find('user-location---cityName', best_match=True, timeout=5)
+                await user_geo.mouse_move()
+                await driver.wait(random.uniform(1, 3))
+                await user_geo.click()
 
-            section_name = skladi[i]
+                # находим и жмём поле ввода города
+                input_geo = await tab.find("searchControlInput---3aCkg_0", timeout=5)
+                await input_geo.mouse_move()
+                await driver.wait(random.uniform(1, 3))
+                await input_geo.click()
 
-            # проверяем есть ли страницы, листаем если есть, читаем все товары
-            pagination_info = bs.find('p', class_=re.compile('^pagination---paginationInfo.*'))
+                krestik = await tab.find("search-autocomplete__clear-btn", best_match=True, timeout=5)
+                await krestik.mouse_move()
+                await driver.wait(random.uniform(1, 3))
+                await krestik.click()
 
-            if pagination_info == None:  # если страниц нет - считываем одну эту страницу
-                item_description_boxes = bs.find_all(
-                    class_='product-item simple-card')  # amw-product-viewer-item__description-box
-                dd = len(item_description_boxes)
-                print(f"Количество товаров в разделе: {len(item_description_boxes)}")
-                if dd == 0:
-                    print("Товаров нет на странице!")
-                    await driver.wait(10)
-                    continue
-                ppp = get_all_product_from_sale_page(driver, produkti, item_description_boxes, section_name)
+                # Выбираю склад
+                await driver.wait(random.uniform(1, 3))
+                await input_geo.send_keys(skladi[i])
+                await driver.wait(5)
 
-                produkti += ppp
-                # return produkti
-            else:  # если страницы есть то считываем, листаем, считываем
-                print(f'======= Страница Акции, склад {section_name} - есть вторая страница!!!')
-                # ss = pagination_info.text[9:10]
-                # page_current = int(pagination_info.text[9:10])  # текущая страница
-                # ss = pagination_info.text
-                # page_count = int(pagination_info.text[14:15])  # всего страниц
-                # page_number = 1
-                # while page_number <= page_count:
-                #     item_description_boxes = bs.find_all(
-                #         class_='amw-product-viewer-item__inner')  # amw-product-viewer-item__inner
-                #     dd = len(item_description_boxes)
-                #     ppp = get_all_product_from_sale_page(driver, produkti, item_description_boxes, section_name)
-                #     produkti += ppp
-                #
-                #     # input("Листай страницу и ввод:")
-                #
-                #     button_next_page = await tab.find("aqa-pagination-forward-button")
-                #     await button_next_page.mouse_move()
-                #     await driver.wait(2)
-                #     await button_next_page.click()
-                #
-                #     site_header = await tab.find("site-header ")
-                #     await site_header.mouse_move()
-                #     await driver.wait(1)
-                #
-                #     bs = BeautifulSoup(await tab.get_content(), 'html.parser')
-                #     page_number += 1
+                # находим и жмём город в списке
+                city = await tab.find("search-autocomplete-results__item", timeout=5) # skladi_list[i])
+                await city.mouse_move()
+                await driver.wait(random.uniform(1, 3))
+                await city.click()
 
-        # sales_to_exel_telegram(produkti)
-        sales_to_bot_db(produkti)
+                await driver.wait(5)
 
-        current_datetime = datetime.datetime.now()
-        time_now = current_datetime.strftime("%H:%M:%S")
-        date_now = current_datetime.strftime("%d/%m/%y")
-        print(f"{date_now} {time_now} ======================== Отработал цикл ==================")
+                # находим и жмём кнопку Выбрать
+                vibor_but = await tab.find("selector---button---36kyL_0", timeout=5)
+                await vibor_but.mouse_move()
+                await driver.wait(random.uniform(1, 3))
+                await vibor_but.click()
 
-        await driver.wait(86400)  # 86400 секунд = 1 сутки
+                # Жду загрузку страницы Акции
+                try:
+                    element = await tab.wait_for(text="product-article_number", timeout=30)
+                    if element:
+                        print("Страница Акции загрузилась.", element.text)
+                    else:
+                        print("Страница Акции не загрузилась!!!!!!!!")
+                except Exception as e:
+                    print(f"Ошибка ожидания загрузки Страница Акции!: {e}")
+                    return
+
+                await driver.wait(10)
+
+                # парсим страницу
+                bs = BeautifulSoup(await tab.get_content(), 'html.parser')
+
+                # словарь для хранения параметров товаров
+                # articul = {}
+                # список для хранения всех товаров
+
+                section_name = skladi[i]
+
+                # проверяем есть ли страницы, листаем если есть, читаем все товары
+                pagination_info = bs.find('p', class_=re.compile('^pagination---paginationInfo.*'))
+
+                if pagination_info == None:  # если страниц нет - считываем одну эту страницу
+                    item_description_boxes = bs.find_all(
+                        class_='product-item simple-card')  # amw-product-viewer-item__description-box
+                    dd = len(item_description_boxes)
+                    print(f"Количество товаров в разделе: {len(item_description_boxes)}")
+                    if dd == 0:
+                        print("Товаров нет на странице!")
+                        await driver.wait(10)
+                        ppp = []
+                    else:
+                        ppp = get_all_product_from_sale_page(driver, produkti, item_description_boxes, section_name)
+
+                    produkti += ppp
+                    # return produkti
+                else:  # если страницы есть то считываем, листаем, считываем
+                    print(f'======= Страница Акции, склад {section_name} - есть вторая страница!!!')
+                    # ss = pagination_info.text[9:10]
+                    # page_current = int(pagination_info.text[9:10])  # текущая страница
+                    # ss = pagination_info.text
+                    # page_count = int(pagination_info.text[14:15])  # всего страниц
+                    # page_number = 1
+                    # while page_number <= page_count:
+                    #     item_description_boxes = bs.find_all(
+                    #         class_='amw-product-viewer-item__inner')  # amw-product-viewer-item__inner
+                    #     dd = len(item_description_boxes)
+                    #     ppp = get_all_product_from_sale_page(driver, produkti, item_description_boxes, section_name)
+                    #     produkti += ppp
+                    #
+                    #     # input("Листай страницу и ввод:")
+                    #
+                    #     button_next_page = await tab.find("aqa-pagination-forward-button")
+                    #     await button_next_page.mouse_move()
+                    #     await driver.wait(2)
+                    #     await button_next_page.click()
+                    #
+                    #     site_header = await tab.find("site-header ")
+                    #     await site_header.mouse_move()
+                    #     await driver.wait(1)
+                    #
+                    #     bs = BeautifulSoup(await tab.get_content(), 'html.parser')
+                    #     page_number += 1
+
+            # sales_to_exel_telegram(produkti)
+            if len(produkti) == 0:
+                print("Нет ни одного товара со скидкой на всех складах!")
+            sales_to_bot_db(produkti)
+
+            driver.stop()
+
+            current_datetime = datetime.datetime.now()
+            time_now = current_datetime.strftime("%H:%M:%S")
+            date_now = current_datetime.strftime("%d/%m/%y")
+            print(f"{date_now} {time_now} ======================== Отработал цикл ==================")
+
+            # Вычисляю, сколько секунд до следующего дня 1:00
+            # Получаем текущее время
+            now = datetime.datetime.now()
+            # Устанавливаем время 1:00 сегодня
+            target_time = now.replace(hour=1, minute=0, second=0, microsecond=0)
+            # Если текущее время уже прошло 1:00, устанавливаем время 1:00 следующего дня
+            if now >= target_time:
+                target_time += datetime.timedelta(days=1)
+            # Считаем разницу во времени
+            time_difference = target_time - now
+            # Получаем количество секунд
+            seconds_until_target = int(time_difference.total_seconds())
+            print(f"До завтра 1:00 осталось {seconds_until_target} секунд. Устанавливаю таймер, жду...")
+
+            await driver.wait(seconds_until_target+random.uniform(60, 600))  # 86400 секунд = 1 сутки
+
+    except Exception as e:
+        print(f"Что-то пошло не так! Ошибка:\n{e}")
 
 # Закрываем Хром
     # driver.close()
