@@ -7,17 +7,7 @@ import re
 import nodriver as uc
 import sqlite3
 import datetime
-# from selenium import webdriver
-# from selenium.webdriver import ActionChains
-# from selenium.common import NoSuchElementException, ElementNotInteractableException
-# from selenium.webdriver.chrome.options import Options
-# from selenium.webdriver.common.by import By
-# from selenium.webdriver.support.ui import WebDriverWait
 import win32com.client  # pywin32 это работа с Exel через COM напрямую
-# import json
-# from PyQt6 import QtCore, QtGui, QtWidgets
-# from PyQt6.QtWidgets import QMessageBox
-
 
 '''
 Переустановил пакет websockets с версии 14.1 на версию 13 - иначе ошибка
@@ -43,7 +33,14 @@ def get_all_product_from_sale_page(driver, produkti, item_description_box_l, sec
         else:
             art['sale_percent'] = 0
 
-        item_price = item_description.find(class_='product-price_current')
+        item_price = item_description.find(class_='product-price_old')  # цена БЕЗ скидки - только в разделе Акции
+        if not item_price is None:
+            params = string_to_numbers(item_price.text)
+            art['old_value'] = params[0]
+        else:
+            art['old_value'] = 0
+
+        item_price = item_description.find(class_='product-price_current')  # цена со скидкой
         if not item_price is None:
             params = string_to_numbers(item_price.text)
             art['sale_value'] = params[0]
@@ -121,11 +118,11 @@ def get_all_product_from_sale_page(driver, produkti, item_description_box_l, sec
 
             if not find:
                 prod.append(art.copy())
-                print(f"Добавил товар в список: {art['artikul']} {art['name']}")
+                print(f"Добавил товар в список: {art['artikul']} {art['old_value']} {art['sale_value']} {art['name']}")
             else:
                 print(f"Товар повторился в списке, добавляю склад: {art['artikul']} {art['name']}")
 
-    return prod  # ключи словаря артикула: sale_value, sale_percent, name, artikul, section
+    return prod  # ключи словаря артикула: old_value, sale_value, sale_percent, name, artikul, section
 
 
 def sales_to_exel_telegram(produkti):
@@ -183,11 +180,11 @@ def sales_to_bot_db(produkti): # sale_value, sale_percent, name, artikul, sectio
     kod_real = [] # список для запоминания кода
     print("Начинаю обновлять коды Акций в базе.")
     # =================================================================================================
-    with sqlite3.connect("C:\\Users\\vedmed\\PycharmProjects\\AmKotTelBot\\dist\\AmVrnKotlBot_telegram_clients.db") as db:
+    with sqlite3.connect(db_path) as db:
         # ====================================================================================================
         cur = db.cursor()
         # обнуляем все скидки в базе
-        sbros = cur.execute("UPDATE tblPriceList SET skidka=?, skidka_price=?, sklad=?", ("", "", "",))
+        sbros = cur.execute("UPDATE tblPriceList SET skidka=?, old_price=?, skidka_price=?, sklad=?", ("", "", "", "",))
         db.commit()
         i = 1 # счётчик для нумерации строк лога
         for produkt in produkti:
@@ -195,6 +192,7 @@ def sales_to_bot_db(produkti): # sale_value, sale_percent, name, artikul, sectio
             kod_real.append(kod)  # запоминаем код для сравнения потом
             articul_name = produkt['name']
             articul_sale_percent = produkt['sale_percent']
+            articul_old_price = produkt['old_value']
             articul_sale_price = produkt['sale_value']
             articul_sklad = produkt['section']
 
@@ -212,8 +210,8 @@ def sales_to_bot_db(produkti): # sale_value, sale_percent, name, artikul, sectio
                 print(f"{i}=============КОДА НЕТ В БАЗЕ {kod} {articul_name}")
             else:
                 # "UPDATE users SET email='bob@newemail.com' WHERE name='Bob'"
-                sale = cur.execute("UPDATE tblPriceList SET skidka=?, skidka_price=?, sklad=? \
-                              WHERE kod=?", (articul_sale_percent, articul_sale_price, articul_sklad, kod,))
+                sale = cur.execute("UPDATE tblPriceList SET skidka=?, old_price=?, skidka_price=?, sklad=? \
+                              WHERE kod=?", (articul_sale_percent, articul_old_price, articul_sale_price, articul_sklad, kod,))
                 db.commit()
                 print(f"{i} +++++ {kod}, скидки кода обновлены")
             i += 1
@@ -223,7 +221,7 @@ def sales_to_bot_db(produkti): # sale_value, sale_percent, name, artikul, sectio
     return
 
 
-def string_to_numbers(str_am):
+def string_to_numbers(str_am: str):
     ''' получает строку вида: '\n Промый ы\n -₸ 70,00\n  ины\n  ₸ 70,00\n Всег\n  -25,00
     8722 - это html-знак 'минус'
     находит все цифры в строке и возвращает список цифр float
@@ -256,7 +254,7 @@ def string_to_numbers(str_am):
             minus_flag = bool(0)
         else:
             prev_char = ''
-    return digits # возвращает список цифр формата float
+    return digits  # возвращает список цифр формата float
 
 
 async def main():
@@ -449,7 +447,9 @@ async def main():
             # sales_to_exel_telegram(produkti)
             if len(produkti) == 0:
                 print("Нет ни одного товара со скидкой на всех складах!")
-            sales_to_bot_db(produkti)
+            else:
+                print("Пишу данные в базу...")
+                sales_to_bot_db(produkti)
 
             driver.stop()
 
@@ -484,6 +484,11 @@ async def main():
 
 if __name__ == '__main__':
     # since asyncio.run never worked (for me)
+    # ===============================================================================================================
+    # ===============================================================================================================
+    db_path = "C:\\Users\\vedmed\\PycharmProjects\\AmKotTelBot\\dist\\AmVrnKotlBot_telegram_clients.db"
+    # ===============================================================================================================
+    # ===============================================================================================================
     uc.loop().run_until_complete(main())
     print("Программа завершилась!!!")
     time.sleep(86400)
